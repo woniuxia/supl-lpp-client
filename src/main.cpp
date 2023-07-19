@@ -183,25 +183,11 @@ int main(int argc, char* argv[]) {
     // information from the device.
     client.provide_location_information_callback(NULL, provide_location_information_callback);
 
-    // Register callback for when the location server request ECID and
-    // measurements from the device.
-    client.provide_ecid_callback(NULL, provide_ecid_callback);
-
     // Connect to location server
     if (!client.connect(options.host, options.port, options.ssl, cell, assistance_data_callback)) {
         printf("ERROR: Connection failed. (%s:%i%s)\n", options.host, options.port,
                options.ssl ? " [ssl]" : "");
         return 1;
-    }
-
-    // Initialize Modem
-    if (options.modem) {
-        modem = new Modem_AT(options.modem, options.modem_baud_rate, cell);
-        if (!modem->initialize()) {
-            printf("ERROR: Modem connection failed. (device: %s, baud-rate: %u)\n", options.modem,
-                   options.modem_baud_rate);
-            return 1;
-        }
     }
 
 
@@ -242,30 +228,6 @@ bool provide_location_information_callback(LocationInformation* location, UNUSED
     location->time = time(NULL);
     location->lat  = 20;
     location->lon  = 20;
-    return true;
-}
-
-bool provide_ecid_callback(ECIDInformation* ecid, UNUSED void* userdata) {
-    if (!modem) return false;
-
-    auto neighbors = modem->neighbor_cells();
-    auto cell      = modem->cell();
-    if (!cell.has_value()) return false;
-
-    ecid->cell           = cell.value();
-    ecid->neighbor_count = 0;
-
-    for (auto& neighbor_cell : neighbors) {
-        if (ecid->neighbor_count < 16) {
-            ecid->neighbors[ecid->neighbor_count++] = {
-                .id     = neighbor_cell.id,
-                .earfcn = neighbor_cell.EARFCN,
-                .rsrp   = neighbor_cell.rsrp,
-                .rsrq   = neighbor_cell.rsrq,
-            };
-        }
-    }
-
     return true;
 }
 
@@ -514,30 +476,10 @@ void assistance_data_callback(LPP_Client*, LPP_Transaction*, LPP_Message* messag
     if(1) {
         return;
     }
-    Generated     generated_messages{};
     unsigned char buffer[4 * 4096];
-    auto          size   = sizeof(buffer);
-    auto          length = generator.convert(buffer, &size, message, &generated_messages);
-    printf("length: %4zu | msm%2i | ", length, generated_messages.msm);
-    if (generated_messages.mt1074) printf("1074 ");
-    if (generated_messages.mt1075) printf("1075 ");
-    if (generated_messages.mt1076) printf("1076 ");
-    if (generated_messages.mt1077) printf("1077 ");
-    if (generated_messages.mt1084) printf("1084 ");
-    if (generated_messages.mt1085) printf("1085 ");
-    if (generated_messages.mt1086) printf("1086 ");
-    if (generated_messages.mt1087) printf("1087 ");
-    if (generated_messages.mt1094) printf("1094 ");
-    if (generated_messages.mt1095) printf("1095 ");
-    if (generated_messages.mt1096) printf("1096 ");
-    if (generated_messages.mt1097) printf("1097 ");
-    if (generated_messages.mt1030) printf("1030 ");
-    if (generated_messages.mt1031) printf("1031 ");
-    if (generated_messages.mt1230) printf("1230 ");
-    if (generated_messages.mt1006) printf("1006 ");
-    if (generated_messages.mt1032) printf("1032 ");
     printf("\n");
     fflush(stdout);
+    int length = 0;
 
     if (length > 0) {
         // Output to serial port
