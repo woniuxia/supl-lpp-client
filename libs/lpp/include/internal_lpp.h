@@ -16,8 +16,7 @@ LPP_Message* lpp_create(LPP_Transaction* transaction, LPP_MessageBody__c1_PR pr)
 void         lpp_destroy(LPP_Message* lpp);
 
 OCTET_STRING* lpp_provide_capabilities(LPP_Transaction* transaction);
-OCTET_STRING* lpp_request_assistance_data(LPP_Transaction* transaction, CellID cell,
-                                          long periodic_id, long interval);
+OCTET_STRING* lpp_request_assistance_data(LPP_Transaction* transaction, CellID cell, long interval);
 OCTET_STRING* lpp_request_assistance_data_ssr(LPP_Transaction* transaction, CellID cell,
                                           long periodic_id, long interval);
 OCTET_STRING* lpp_abort(LPP_Transaction* transaction);

@@ -95,6 +95,7 @@ struct OSR {
     OSR_GNSS gps;
     OSR_GNSS glo;
     OSR_GNSS gal;
+    OSR_GNSS bds;
 
     int system_mask;
 };

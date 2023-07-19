@@ -330,6 +330,8 @@ bool gather_observations(LPP_Message* message, OSR* osr) {
             gnss = &osr->glo;
         } else if (element->gnss_ID.gnss_id == GNSS_ID__gnss_id_galileo) {
             gnss = &osr->gal;
+        } else if(element->gnss_ID.gnss_id == GNSS_ID__gnss_id_bds) {
+            gnss = &osr->bds;
         } else
             continue;
 

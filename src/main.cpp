@@ -76,7 +76,7 @@ Options parse_arguments(int argc, char* argv[]) {
         case 'c': options.mcc = atoi(optarg); break;
         case 'n': options.mnc = atoi(optarg); break;
         case 'i': options.cell_id = atoi(optarg); break;
-        case 't': options.tac = atoi(optarg); break;
+        case 't': options.tac = atoi(optarg); printf("tac:%d\n", atoi(optarg));break;
 
         case 'y': options.msm_type = atoi(optarg); break;
         case 'k': options.server_ip = strdup(optarg); break;
@@ -108,11 +108,8 @@ Options parse_arguments(int argc, char* argv[]) {
 int           connected = -1;
 int           streaming = -1;
 int           sockfd;
-std::ofstream rtcm_file;
-RTCMGenerator generator;
 LPP_Client    client;
 CellID        cell;
-Modem_AT*     modem;
 int           device;
 
 bool provide_location_information_callback(LocationInformation* location, void* userdata);
@@ -176,38 +173,6 @@ int main(int argc, char* argv[]) {
         usleep(1000);
     }
 
-    if (options.file_output) {
-        // Create output file
-        rtcm_file = std::ofstream{options.file_output};
-        printf("OUTPUT File:        %s\n", options.file_output);
-        if (!rtcm_file.is_open()) {
-            printf("ERROR: Opening file output failed.\n");
-            return 1;
-        }
-    }
-
-    if (options.server_ip) {
-        // Create output server
-        sockfd = socket(AF_INET, SOCK_STREAM, 0);
-        if (sockfd == -1) {
-            printf("ERROR: Socket creation for output failed.\n");
-            return 1;
-        }
-
-        struct sockaddr_in serveraddr;
-        bzero(&serveraddr, sizeof(serveraddr));
-        serveraddr.sin_family      = AF_INET;
-        serveraddr.sin_addr.s_addr = inet_addr(options.server_ip);
-        serveraddr.sin_port        = htons(options.server_port);
-
-        printf("OUTPUT Server:      %s:%d \n", options.server_ip, options.server_port);
-        connected = connect(sockfd, (sockaddr*)&serveraddr, sizeof(serveraddr));
-        if (connected != 0) {
-            printf("ERROR: Unable to connect to OUTPUT server.\n");
-        } else {
-            printf("Connect to OUTPUT server.\n");
-        }
-    }
     // Flush pending printf output
     fflush(stdout);
 
@@ -223,7 +188,7 @@ int main(int argc, char* argv[]) {
     client.provide_ecid_callback(NULL, provide_ecid_callback);
 
     // Connect to location server
-    if (!client.connect(options.host, options.port, options.ssl, cell)) {
+    if (!client.connect(options.host, options.port, options.ssl, cell, assistance_data_callback)) {
         printf("ERROR: Connection failed. (%s:%i%s)\n", options.host, options.port,
                options.ssl ? " [ssl]" : "");
         return 1;
@@ -239,46 +204,6 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Enable generation of message for GPS, GLONASS, and Galileo.
-    auto gnss = GNSSSystems{
-        .gps     = true,
-        .glonass = true,
-        .galileo = true,
-    };
-
-    // Filter what messages you want generated.
-    auto filter = MessageFilter{};
-    if (options.msm_type == 4) {
-        filter.msm.msm4 = true;
-        filter.msm.msm5 = false;
-        filter.msm.msm6 = false;
-        filter.msm.msm7 = false;
-    } else if (options.msm_type == 5) {
-        filter.msm.msm4 = false;
-        filter.msm.msm5 = true;
-        filter.msm.msm6 = false;
-        filter.msm.msm7 = false;
-    } else if (options.msm_type == 6) {
-        filter.msm.msm4 = false;
-        filter.msm.msm5 = false;
-        filter.msm.msm6 = true;
-        filter.msm.msm7 = false;
-    } else if (options.msm_type == 7) {
-        filter.msm.msm4 = false;
-        filter.msm.msm5 = false;
-        filter.msm.msm6 = false;
-        filter.msm.msm7 = true;
-    }
-
-    printf("MSM Messages:      ");
-    if (filter.msm.msm4) printf(" MSM4");
-    if (filter.msm.msm5) printf(" MSM5");
-    if (filter.msm.msm6) printf(" MSM6");
-    if (filter.msm.msm7) printf(" MSM7");
-    printf("\n");
-
-    // Create RTCM generator for converting LPP messages to RTCM messages.
-    generator = RTCMGenerator{gnss, filter};
 
 #if !SSR
     // Request assistance data (OSR) from server for the 'cell' and register a callback
@@ -344,14 +269,255 @@ bool provide_ecid_callback(ECIDInformation* ecid, UNUSED void* userdata) {
     return true;
 }
 
+#define c_2p55    36028797018963968
+#define c_2p50    1125899906842624
+#define c_2p43    8796093022208
+#define c_2p38    274877906944  
+#define c_2p33    8589934592  
+#define c_2p31    2147483648  
+#define c_2p30    1073741824  
+#define c_2p29    536870912  
+#define c_2p27    134217728  
+#define c_2p24    16777216  
+#define c_2p23    8388608  
+#define c_2p21    2097152  
+#define c_2p20    1048576  
+#define c_2p19    524288  
+#define c_2p16    65536.0
+#define c_2p14    16384.0
+#define c_2p12    4096.0
+#define c_2p11    2048.0
+#define c_2p5     32
+#define c_2p4     16.0
+#define c_2p3     8
+
+#define c_2m4     0.0625
+#define c_2m5     0.03125
+#define c_2m6     0.015625
+#define c_2m11    4.8828125e-4
+#define c_2m12    0.000244140625
+#define c_2m14    0.00006103515625
+#define c_2m16    0.0000152587890625
+#define c_2m19    1.9073486328125e-6
+#define c_2m20    9.5367431640625e-7
+#define c_2m21    4.76837158203125e-7
+#define c_2m23    1.1920928955078125e-7
+#define c_2m24    5.9604644775390625e-8
+#define c_2m27    7.450580596923828125e-9
+#define c_2m29    1.86264514923095703125e-9
+#define c_2m30    9.31322574615478515625e-10
+#define c_2m31    4.656612873077392578125e-10
+#define c_2m32    2.32830644e-10
+#define c_2m33    1.16415321826934814453125e-10
+#define c_2m34    5.82076609e-11
+#define c_2m38    3.63797880709171295166015625e-12
+#define c_2m43    1.136868377216160297393798828125e-13
+#define c_2m46    1.42108547e-14
+#define c_2m50    8.8817841970012523233890533447266e-16
+#define c_2m55    2.7755575615628913510590791702271e-17
+#define c_2m59    1.73472348e-18
+#define c_2m66    1.35525271560688e-20
+
+#define CUBE(x)  ((x)*(x)*(x))	 
+
+typedef struct ephemeris
+{
+  int    SatID,
+         Valideph,    // 
+         ExpiredSeceph,
+         week,     // 10bit,week number
+         tow,      // 0 - 604800 seconds
+         iodc,     // 10bit,issue of date, clock       IODC=..IODE
+         iode,     // 8bit, issue of date, ephemeris
+         ura,      // 4bit, user range accuracy
+         health;   // 6bit, satellite health
+
+  float  af0,      // clock polynomial correction parameters
+         af1,
+         af2,
+         tgd,      // satellite group delay differential correction term
+         toc,      // clock data reference time
+         toe,      // reference time ephemeris
+         ety,      // eccentricity  
+         sqra,     // square root of semi-major axis 
+         ma,       // mean anomaly at reference time 
+         wm,       // mean motion [rad/sec]          
+         dn,       // mean motion correction term (delta n)
+         inc0,     // inclination angle at reference time  
+         idot,     // rate of inclination angle  
+         omega0,   // (was w0) longitude of ascending node of orbit plane at weekly epoch 
+         omegadot, // rate of right ascension    
+         w,        // argument of perigee  
+         cuc,      // amplitude of the cosine harmonic correction term to the argument of latitude
+         cus,      // amplitude of the sine harmonic correction term to the argument of latitude
+         crc,      // amplitude of the cosine harmonic correction term to the orbit radius
+         crs,      // amplitude of the sine harmonic correction term to the orbit radius
+         cic,      // amplitude of the cosine harmonic correction term to the angle of inclination
+         cis;      // amplitude of the sine harmonic correction term to the angle of inclination
+} EPHEMERIS;
+
+void printf_ephemeris(EPHEMERIS ephemeris) {
+    printf("SatId:%d, validEph:%d, week:%d, tow:%d, iodc:%d, iode:%d, ura:%d, health:%d, ",
+            ephemeris.SatID,
+            ephemeris.Valideph,
+            ephemeris.week,
+            ephemeris.tow,
+            ephemeris.iodc,
+            ephemeris.iode,
+            ephemeris.ura,
+            ephemeris.health);
+    
+    printf("af0:%.8e, af1:%e, af2:%.8e, tgd:%.8e, toc:%.8e, toe:%.8e, ety:%.8e, sqra:%.8e, ma:%.8e, wm:%.8e, dn:%.8e, inc0:%.8e, idot:%.8e, omega0:%.8e, omegadot:%.8e, w:%.8e, ",
+            ephemeris.af0,
+            ephemeris.af1,
+            ephemeris.af2,
+            ephemeris.tgd,
+            ephemeris.toc,
+            ephemeris.toe,
+            ephemeris.ety,
+            ephemeris.sqra,
+            ephemeris.ma,
+            ephemeris.wm,
+            ephemeris.dn,
+            ephemeris.inc0,
+            ephemeris.idot,
+            ephemeris.omega0,
+            ephemeris.omegadot,
+            ephemeris.w);
+    
+    printf("cuc:%.8e, cus:%.8e, crc:%.8e, crs:%.8e, cic:%.8e, cis:%.8e\n",
+            ephemeris.cuc,
+            ephemeris.cus,
+            ephemeris.crc,
+            ephemeris.crs,
+            ephemeris.cic,
+            ephemeris.cis);
+}
+
 void assistance_data_callback(LPP_Client*, LPP_Transaction*, LPP_Message* message, void*) {
+    printf("whc:at function:%s, line number:%d \n",  __FUNCTION__, __LINE__);
 #if !SSR
     // Convert LPP message to buffer of RTCM coded messages.
+
+    auto provideAssistanceData = message->lpp_MessageBody->choice.c1.choice.provideAssistanceData.criticalExtensions.choice.c1.choice.provideAssistanceData_r9.a_gnss_ProvideAssistanceData;
+
+    auto gnss_SystemTime = provideAssistanceData->gnss_CommonAssistData->gnss_ReferenceTime->gnss_SystemTime;
+    int tow = gnss_SystemTime.gnss_DayNumber % 7 * 24 * 60 * 60 + gnss_SystemTime.gnss_TimeOfDay;
+
+    for(int i = 0; i < provideAssistanceData->gnss_GenericAssistData->list.count; ++i) {
+
+        auto genericAssistDataElement = provideAssistanceData->gnss_GenericAssistData->list.array[i];
+        printf("gnss id:%ld\n", genericAssistDataElement->gnss_ID.gnss_id);
+        auto modelSatelliteElements = genericAssistDataElement->gnss_NavigationModel->gnss_SatelliteList.list;
+        printf("size:%d\n", modelSatelliteElements.size);
+        printf("count:%d\n", modelSatelliteElements.count);
+
+        for (int i = 0; i < modelSatelliteElements.count; i++)
+        {
+
+            if(genericAssistDataElement->gnss_ID.gnss_id == GNSS_ID__gnss_id_gps) {
+                
+                auto modelSatelliteElement = modelSatelliteElements.array[i];
+                auto keplerianSet = modelSatelliteElement->gnss_OrbitModel.choice.nav_KeplerianSet;
+                auto clockModel = modelSatelliteElement->gnss_ClockModel.choice.nav_ClockModel;
+
+                EPHEMERIS ephemeris;
+
+                // asn_bit_string_int64
+                ephemeris.SatID = modelSatelliteElement->svID.satellite_id;
+                ephemeris.Valideph = 1;
+                ephemeris.week = *genericAssistDataElement->gnss_Almanac->weekNumber;
+                ephemeris.tow = tow;
+                ephemeris.iodc = asn_bit_string_int64_left(&modelSatelliteElement->iod, 0, 11);
+                ephemeris.iode = asn_bit_string_int64_left(&modelSatelliteElement->iod, 0, 11);
+                ephemeris.ura = keplerianSet.navURA;
+                ephemeris.health = asn_bit_string_int64(&modelSatelliteElement->svHealth, 0);
+                
+                ephemeris.af0 = clockModel.navaf0 * c_2m31;
+                ephemeris.af1 = clockModel.navaf1 * c_2m43;
+                ephemeris.af2 = clockModel.navaf2 * c_2m55;
+                ephemeris.tgd = clockModel.navTgd * c_2m31;
+                ephemeris.toc = clockModel.navToc * c_2p4;
+
+                ephemeris.toe = keplerianSet.navToe * c_2p4;
+                ephemeris.ety = keplerianSet.navE * c_2m33;
+                ephemeris.sqra = keplerianSet.navAPowerHalf * c_2m19;
+                ephemeris.ma = keplerianSet.navM0 * c_2m31;
+                ephemeris.wm = (float)19964981.843217388 / CUBE(ephemeris.sqra); 
+                ephemeris.dn = keplerianSet.navDeltaN * c_2m43;
+                ephemeris.inc0 = keplerianSet.navI0 * c_2m31;
+                ephemeris.idot = keplerianSet.navIDot * c_2m43;
+                ephemeris.omega0 = keplerianSet.navOmegaA0 * c_2m31;
+                ephemeris.omegadot = keplerianSet.navOmegaADot * c_2m43;
+                ephemeris.w = keplerianSet.navOmega * c_2m31;
+
+                ephemeris.cuc = keplerianSet.navCuc * c_2m29;
+                ephemeris.cus = keplerianSet.navCus * c_2m29;
+                ephemeris.crc = keplerianSet.navCrc * c_2m5;
+                ephemeris.crs = keplerianSet.navCrs * c_2m5;
+                ephemeris.cic = keplerianSet.navCic * c_2m29;
+                ephemeris.cis = keplerianSet.navCis * c_2m29;
+
+                printf_ephemeris(ephemeris);
+            } else if(genericAssistDataElement->gnss_ID.gnss_id == GNSS_ID__gnss_id_bds) {
+
+                auto modelSatelliteElement = modelSatelliteElements.array[i];
+                auto keplerianSet = modelSatelliteElement->gnss_OrbitModel.choice.bds_KeplerianSet_r12;
+                auto clockModel = modelSatelliteElement->gnss_ClockModel.choice.bds_ClockModel_r12;
+
+                EPHEMERIS ephemeris;
+
+                // asn_bit_string_int64
+                ephemeris.SatID = modelSatelliteElement->svID.satellite_id;
+                ephemeris.Valideph = 1;
+                ephemeris.week = *genericAssistDataElement->gnss_Almanac->weekNumber;
+                ephemeris.tow = tow;
+                ephemeris.iodc = asn_bit_string_int64_left(&modelSatelliteElement->iod, 0, 11);
+                ephemeris.iode = asn_bit_string_int64_left(&modelSatelliteElement->iod, 0, 11);
+                ephemeris.ura = keplerianSet.bdsURAI_r12;
+                ephemeris.health = asn_bit_string_int64(&modelSatelliteElement->svHealth, 0);
+                
+                ephemeris.af0 = clockModel.bdsA0_r12 * c_2m33;
+                ephemeris.af1 = clockModel.bdsA1_r12 * c_2m50;
+                ephemeris.af2 = clockModel.bdsA2_r12 * c_2m66;
+                ephemeris.tgd = clockModel.bdsTgd1_r12 * 0.1;
+                ephemeris.toc = clockModel.bdsToc_r12 * c_2p3;
+
+                ephemeris.toe = keplerianSet.bdsToe_r12 * c_2p3;
+                ephemeris.ety = keplerianSet.bdsE_r12 * c_2m33;
+                ephemeris.sqra = keplerianSet.bdsAPowerHalf_r12 * c_2m19;
+                ephemeris.ma = keplerianSet.bdsM0_r12 * c_2m31;
+                ephemeris.wm = (float)19964981.843217388 / CUBE(ephemeris.sqra); 
+                ephemeris.dn = keplerianSet.bdsDeltaN_r12 * c_2m43;
+                ephemeris.inc0 = keplerianSet.bdsI0_r12 * c_2m31;
+                ephemeris.idot = keplerianSet.bdsIDot_r12 * c_2m43;
+                ephemeris.omega0 = keplerianSet.bdsOmega0_r12 * c_2m31;
+                ephemeris.omegadot = keplerianSet.bdsOmegaDot_r12 * c_2m43;
+                ephemeris.w = keplerianSet.bdsW_r12 * c_2m31;
+
+                ephemeris.cuc = keplerianSet.bdsCuc_r12 * c_2m31;
+                ephemeris.cus = keplerianSet.bdsCus_r12 * c_2m31;
+                ephemeris.crc = keplerianSet.bdsCrc_r12 * c_2m6;
+                ephemeris.crs = keplerianSet.bdsCrs_r12 * c_2m6;
+                ephemeris.cic = keplerianSet.bdsCic_r12 * c_2m31;
+                ephemeris.cis = keplerianSet.bdsCis_r12 * c_2m31;
+                
+                printf_ephemeris(ephemeris);
+            } else {
+                printf("gnss:%ld, not support!\n", genericAssistDataElement->gnss_ID.gnss_id);
+            }
+
+        }
+    
+    }
+
+    if(1) {
+        return;
+    }
     Generated     generated_messages{};
     unsigned char buffer[4 * 4096];
     auto          size   = sizeof(buffer);
     auto          length = generator.convert(buffer, &size, message, &generated_messages);
-
     printf("length: %4zu | msm%2i | ", length, generated_messages.msm);
     if (generated_messages.mt1074) printf("1074 ");
     if (generated_messages.mt1075) printf("1075 ");
@@ -374,26 +540,12 @@ void assistance_data_callback(LPP_Client*, LPP_Transaction*, LPP_Message* messag
     fflush(stdout);
 
     if (length > 0) {
-        // Write to file
-        if (rtcm_file.is_open()) {
-            rtcm_file.write((char*)buffer, length);
-            rtcm_file.flush();
-        }
-
         // Output to serial port
         if (device > 0) {
             auto output = write(device, (char*)buffer, length);
             // If an error occurs streaming to serial port, unset the streaming flag
             if (output == -1) {
                 streaming = 0;
-            }
-        }
-
-        // Output to server
-        if (connected == 0) {
-            auto result = write(sockfd, buffer, length);
-            if (result == -1) {
-                connected = 0;
             }
         }
     }

@@ -6,6 +6,7 @@
 static void tls_init(void) {
     SSL_load_error_strings();
     SSLeay_add_ssl_algorithms();
+    printf("tls init done!\n");
 }
 #endif
 

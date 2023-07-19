@@ -35,7 +35,7 @@ ULP_PDU_t* supl_create_message(SUPLSession* session, UlpMessage_PR present) {
     ULP_PDU_t* ulp       = ALLOC_ZERO(ULP_PDU_t);
     ulp->length          = 0;
     ulp->version.maj     = 2;
-    ulp->version.min     = 1;
+    ulp->version.min     = 0;
     ulp->version.servind = 0;
 
     SetSessionID_t* session_id                 = ALLOC_ZERO(SetSessionID_t);
@@ -157,7 +157,7 @@ int supl_start(TCPClient* client, CellID cell, SUPLSession* session) {
     ULP_PDU_t* ulp = supl_create_message(session, UlpMessage_PR_msSUPLSTART);
     ulp->message.choice.msSUPLSTART.locationId.status = Status_current;
     ulp->message.choice.msSUPLSTART.sETCapabilities.posTechnology
-        .agpsSETassisted = true;
+        .agpsSETassisted = false;
     ulp->message.choice.msSUPLSTART.sETCapabilities.posTechnology.agpsSETBased =
         true;
     ulp->message.choice.msSUPLSTART.sETCapabilities.prefMethod =
@@ -167,8 +167,8 @@ int supl_start(TCPClient* client, CellID cell, SUPLSession* session) {
         // LPP Version
         PosProtocolVersion3GPP_t* lpp_pos_protocol =
             ALLOC_ZERO(PosProtocolVersion3GPP_t);
-        lpp_pos_protocol->majorVersionField     = 15;
-        lpp_pos_protocol->technicalVersionField = 4;
+        lpp_pos_protocol->majorVersionField     = 13;
+        lpp_pos_protocol->technicalVersionField = 1;
         lpp_pos_protocol->editorialVersionField = 0;
 
         struct Ver2_PosProtocol_extension* pos_protocol_ext =
@@ -202,13 +202,13 @@ int supl_start(TCPClient* client, CellID cell, SUPLSession* session) {
                                 cell.cell);
 
         /* Set the remaining LTE parameters */
-        lte_cell->physCellId          = 0;
+        lte_cell->physCellId          = 336;
         lte_cell->rsrpResult          = OPTIONAL_MISSING;
         lte_cell->rsrqResult          = OPTIONAL_MISSING;
         lte_cell->measResultListEUTRA = OPTIONAL_MISSING;
     }
 
-    { ulp->message.choice.msSUPLSTART.locationId.status = Status_unknown; }
+    // { ulp->message.choice.msSUPLSTART.locationId.status = Status_unknown; }
 
     int result = supl_send_pdu(client, ulp);
     supl_free_message(ulp);
@@ -240,9 +240,13 @@ int supl_send_posinit(TCPClient* client, CellID cell, SUPLSession* session,
         .agpsSETassisted = true;
     ulp->message.choice.msSUPLPOSINIT.sETCapabilities.posTechnology
         .agpsSETBased = true;
-    ulp->message.choice.msSUPLPOSINIT.sETCapabilities.prefMethod =
-        PrefMethod_agpsSETBasedPreferred;
+    ulp->message.choice.msSUPLPOSINIT.sETCapabilities.posTechnology
+        .autonomousGPS = true;
+    // ulp->message.choice.msSUPLPOSINIT.sETCapabilities.prefMethod =
+    //     PrefMethod_agpsSETBasedPreferred;
 
+    ulp->message.choice.msSUPLPOSINIT.sETCapabilities.prefMethod =
+        PrefMethod_agpsSETassistedPreferred;
     {
         // LPP
         struct Ver2_PosProtocol_extension* posprotocol_ext =
@@ -254,8 +258,8 @@ int supl_send_posinit(TCPClient* client, CellID cell, SUPLSession* session,
         // LPP Version
         struct PosProtocolVersion3GPP* posprotocol_lpp =
             ALLOC_ZERO(struct PosProtocolVersion3GPP);
-        posprotocol_lpp->majorVersionField     = 16;
-        posprotocol_lpp->technicalVersionField = 4;
+        posprotocol_lpp->majorVersionField     = 13;
+        posprotocol_lpp->technicalVersionField = 1;
         posprotocol_lpp->editorialVersionField = 0;
         posprotocol_ext->posProtocolVersionLPP = posprotocol_lpp;
     }
@@ -282,7 +286,7 @@ int supl_send_posinit(TCPClient* client, CellID cell, SUPLSession* session,
                                 cell.cell);
 
         /* Set the remaining LTE parameters */
-        lte_cell->physCellId          = 0;
+        lte_cell->physCellId          = 1;
         lte_cell->rsrpResult          = OPTIONAL_MISSING;
         lte_cell->rsrqResult          = OPTIONAL_MISSING;
         lte_cell->measResultListEUTRA = OPTIONAL_MISSING;

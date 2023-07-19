@@ -157,12 +157,9 @@ size_t RTCMGenerator::convert(unsigned char* buffer, size_t* buffer_size, LPP_Me
     osr.gps.satellite_count  = 0;
     osr.gps.residuals        = {};
     osr.gps.bias_information = {};
-    osr.glo.satellite_count  = 0;
-    osr.glo.residuals        = {};
-    osr.glo.bias_information = {};
-    osr.gal.satellite_count  = 0;
-    osr.gal.residuals        = {};
-    osr.gal.bias_information = {};
+    osr.bds.satellite_count  = 0;
+    osr.bds.residuals        = {};
+    osr.bds.bias_information = {};
 
     auto got_reference_station = gather_reference_station(message, &osr);
     auto got_observations      = gather_observations(message, &osr);

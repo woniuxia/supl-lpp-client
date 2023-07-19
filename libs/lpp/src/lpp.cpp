@@ -22,7 +22,8 @@ LPP_Client::~LPP_Client() {
     delete tcp;
 }
 
-bool LPP_Client::connect(const char* address, int port, bool use_ssl, CellID supl_cell) {
+
+bool LPP_Client::connect(const char* address, int port, bool use_ssl, CellID supl_cell, AD_Callback callback) {
     // Initialize and connect to the location server
     tcp_client_create(tcp, address, port, use_ssl);
     if (!tcp_client_connect(tcp)) {
@@ -44,10 +45,30 @@ bool LPP_Client::connect(const char* address, int port, bool use_ssl, CellID sup
         return false;
     }
 
+    OCTET_STRING* msg_arr[2];
+
+    auto periodic_id = 1;  // TODO(ewasjon): support multiple requests
+    auto transaction = new_transaction();
+    auto octet       = lpp_request_assistance_data(&transaction, supl_cell, 1);
+    msg_arr[0] = octet;
+
+    octet = lpp_provide_capabilities(&transaction);
+    msg_arr[1] = octet;
+
     // Send SUPL-POSINIT
-    if (!supl_send_posinit(tcp, supl_cell, session, NULL, 0)) {
+    // !supl_send_posinit(tcp, supl_cell, session, NULL, 0)
+    if (!supl_send_posinit(tcp, supl_cell, session, msg_arr, 2)) {
         tcp_client_close(tcp);
         return false;
+    }
+
+    main_request             = (AD_Request)periodic_id;
+    main_request_callback    = callback;
+    main_request_userdata    = NULL;
+    main_request_transaction = transaction;
+    if (!wait_for_assistance_data_response(&transaction)) {
+        main_request = AD_REQUEST_INVALID;
+        return AD_REQUEST_INVALID;
     }
 
     connected = true;
@@ -66,7 +87,9 @@ bool LPP_Client::connect(const char* address, int port, bool use_ssl, CellID sup
 LPP_Transaction LPP_Client::new_transaction() {
     LPP_Transaction transaction;
     transaction.id        = transaction_counter;
-    transaction.end       = 0;
+    // TODO
+    // transaction.end       = 0;
+    transaction.end       = 1;
     transaction.initiator = 0;
 
     transaction_counter = (transaction_counter + 1) % 256;
@@ -193,7 +216,7 @@ LPP_Client::AD_Request LPP_Client::request_assistance_data(CellID cell, void* us
 
     auto periodic_id = 1;  // TODO(ewasjon): support multiple requests
     auto transaction = new_transaction();
-    auto octet       = lpp_request_assistance_data(&transaction, cell, periodic_id, 1);
+    auto octet       = lpp_request_assistance_data(&transaction, cell, 1);
     if (!supl_send_pos(tcp, session, octet)) {
         tcp_client_close(tcp);
         connected = false;
@@ -242,7 +265,7 @@ bool LPP_Client::update_assistance_data(AD_Request id, CellID cell) {
     if (id == AD_REQUEST_INVALID) return false;
 
     auto transaction = new_transaction();
-    auto octet       = lpp_request_assistance_data(&transaction, cell, (long)id, 1);
+    auto octet       = lpp_request_assistance_data(&transaction, cell, 1);
     if (!supl_send_pos(tcp, session, octet)) {
         tcp_client_close(tcp);
         connected = false;

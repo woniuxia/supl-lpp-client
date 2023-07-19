@@ -60,7 +60,7 @@ public:
     // Open connection to location server.
     // The 'cell' arguments is required for backwards compatibility and SHOULD
     // match the cell-id used in the first request_assistance_data call.
-    bool connect(const char* address, int port, bool use_ssl, CellID cell);
+    bool connect(const char* address, int port, bool use_ssl, CellID cell, AD_Callback callback);
 
     // Run process loop of receive/send LPP messages.
     bool process();
