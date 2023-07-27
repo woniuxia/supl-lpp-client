@@ -18,25 +18,6 @@
 #define UNUSED [[maybe_unused]]
 #define SSR 0
 
-static struct option long_options[] = {
-    {"host", required_argument, NULL, 'h'},
-    {"port", required_argument, NULL, 'p'},
-    {"mcc", required_argument, NULL, 'c'},
-    {"mnc", required_argument, NULL, 'n'},
-    {"cellid", required_argument, NULL, 'i'},
-    {"tac", required_argument, NULL, 't'},
-    {"msm_type", required_argument, NULL, 'y'},
-    {"server_ip", required_argument, NULL, 'k'},
-    {"server_port", required_argument, NULL, 'o'},
-    {"file_output", required_argument, NULL, 'x'},
-    {"serial_port", required_argument, NULL, 'd'},
-    {"serial_port_baud_rate", required_argument, NULL, 'r'},
-    {"modem_device", required_argument, NULL, 'm'},
-    {"modem_baud_rate", required_argument, NULL, 'b'},
-    {"ssl", no_argument, NULL, 's'},
-    {NULL, 0, NULL, 0},
-};
-
 struct Options {
     const char* host;
     int         port;
@@ -47,66 +28,9 @@ struct Options {
     long tac;
     long cell_id;
     long msm_type;
-
-    const char* server_ip;
-    int         server_port;
-
-    const char*  file_output;
-    const char*  serial_port;
-    long serial_port_baud_rate;
-    const char*  modem;
-    unsigned int modem_baud_rate;
 };
 
-Options parse_arguments(int argc, char* argv[]) {
-    Options options{};
-
-    options.ssl      = false;
-    options.msm_type = -1;
-
-    int c;
-    int option_index;
-    while ((c = getopt_long(argc, argv, ":h:p:sc:n:i:t:y:k:o:x:d:r:m:b:", long_options, &option_index)) !=
-           -1) {
-        switch (c) {
-        case 'h': options.host = strdup(optarg); break;
-        case 'p': options.port = atoi(optarg); break;
-        case 's': options.ssl = true; break;
-
-        case 'c': options.mcc = atoi(optarg); break;
-        case 'n': options.mnc = atoi(optarg); break;
-        case 'i': options.cell_id = atoi(optarg); break;
-        case 't': options.tac = atoi(optarg); printf("tac:%d\n", atoi(optarg));break;
-
-        case 'y': options.msm_type = atoi(optarg); break;
-        case 'k': options.server_ip = strdup(optarg); break;
-        case 'o': options.server_port = atoi(optarg); break;
-
-        case 'x': options.file_output = strdup(optarg); break;
-        case 'd': options.serial_port = strdup(optarg); break;
-        case 'r': options.serial_port_baud_rate = atoi(optarg); break;
-        case 'm': options.modem = strdup(optarg); break;
-        case 'b': options.modem_baud_rate = atoi(optarg); break;
-        
-        // Catch invalid and missing options
-        case '?': printf("Invalid option: %c\n", optopt); exit(1);
-        case ':': printf("Missing argument for: %c\n", optopt); exit(1);
-        default:
-            exit(1);
-        }
-    }
-
-    // Enforce location server host and port as mandatory
-    if (options.host == 0 || options.port == 0) {
-        printf("--host (-h) and --port (-p) options are mandatory\n");
-        exit(1);
-    }
-
-    return options;
-}
-
 int           connected = -1;
-int           streaming = -1;
 int           sockfd;
 LPP_Client    client;
 CellID        cell;
@@ -118,8 +42,26 @@ void assistance_data_callback(LPP_Client*, LPP_Transaction* transaction, LPP_Mes
                               void* userdata);
 speed_t get_baud(long baud);
 
-int main(int argc, char* argv[]) {
-    auto options = parse_arguments(argc, argv);
+int get_agnss() {
+    Options options = Options {
+        // .host = "supl.qxwz.com",
+        // .port = 7276,
+        // .ssl = false,
+
+        // .host = "supl.qxwz.com",
+        // .port = 7275,
+        // .ssl = true,
+
+        .host = "ppp.bd-caict.com",
+        .port = 7275,
+        .ssl = true,
+
+        .mcc = 460,
+        .mnc = 0,
+        .tac = 6291,
+        .cell_id = 25423650,
+    };
+
     cell         = CellID{
         .mcc  = options.mcc,
         .mnc  = options.mnc,
@@ -127,51 +69,9 @@ int main(int argc, char* argv[]) {
         .cell = options.cell_id,
     };
 
-    printf("Location Server:    %s:%d %s\n", options.host, options.port, options.ssl ? "[ssl]" : "");
-    printf("Cell:               MCC=%ld, MNC=%ld, TAC=%ld, Id=%ld\n", cell.mcc, cell.mnc, cell.tac,
+    printf("Location Server: %s:%d %s\n", options.host, options.port, options.ssl ? "[ssl]" : "");
+    printf("Cell:            MCC=%ld, MNC=%ld, TAC=%ld, Id=%ld\n", cell.mcc, cell.mnc, cell.tac,
            cell.cell);
-
-    if (options.serial_port) {
-        // Open serial port
-        device = open(options.serial_port, O_RDWR);
-        printf("OUTPUT Serial Port: %s\n", options.serial_port);
-        if (device < 0) {
-            printf("ERROR: Opening serial port failed. %s.\n", strerror(errno));
-            return 1;
-        }
-
-        // Set flag to indicate streaming to serial port
-        streaming = 1;
-
-        struct termios tios;
-        tcgetattr(device, &tios);
-
-        // Disable flow control, and ignore break and parity errors
-        tios.c_iflag = IGNBRK | IGNPAR;
-        tios.c_oflag = 0;
-        tios.c_lflag = 0;
-
-        if (streaming < 0) {
-            printf("ERROR: Unable to connect to OUTPUT serial port.\n");
-            return 1;
-        }
-
-        // Determine validity of baud rate
-        printf("OUTPUT Baud Rate:   %li\n", options.serial_port_baud_rate);
-
-        // The get_baud function returns a baud rate of 0 for invalid baud rates
-        if (get_baud(options.serial_port_baud_rate) == B0) {
-            printf("ERROR: Invalid baud rate.\n");
-            return 1;
-        }
-
-        // Set baud rate
-        cfsetspeed(&tios, get_baud(options.serial_port_baud_rate));
-        tcsetattr(device, TCSAFLUSH, &tios);
-
-        // The serial port has a brief glitch once we turn it on which generates a start bit; sleep for 1ms to let it settle
-        usleep(1000);
-    }
 
     // Flush pending printf output
     fflush(stdout);
@@ -195,6 +95,8 @@ int main(int argc, char* argv[]) {
     // Request assistance data (OSR) from server for the 'cell' and register a callback
     // when we receive assistance data.
     auto request = client.request_assistance_data(cell, NULL, assistance_data_callback);
+    printf(" Firmware compile time:%s %s\n", __DATE__, __TIME__);
+    return 0;
 #else
     // Request assistance data (SSR) from server for the 'cell' and register a callback
     // when we receive assistance data.
@@ -319,6 +221,17 @@ typedef struct ephemeris
 } EPHEMERIS;
 
 void printf_ephemeris(EPHEMERIS ephemeris) {
+    
+        char * point = (char*)&ephemeris;
+        int size = sizeof(ephemeris);
+        write(device, point, size);
+        
+        // printf("satId:%d\n", ephemeris.SatID);
+        // for(int i = 0; i < size; ++i) {
+        //     printf("%.2x ", (unsigned char)point[i]);
+        // }
+        // printf("\n");
+
     printf("SatId:%d, validEph:%d, week:%d, tow:%d, iodc:%d, iode:%d, ura:%d, health:%d, ",
             ephemeris.SatID,
             ephemeris.Valideph,
@@ -357,26 +270,39 @@ void printf_ephemeris(EPHEMERIS ephemeris) {
 }
 
 void assistance_data_callback(LPP_Client*, LPP_Transaction*, LPP_Message* message, void*) {
-    printf("whc:at function:%s, line number:%d \n",  __FUNCTION__, __LINE__);
-#if !SSR
     // Convert LPP message to buffer of RTCM coded messages.
 
     auto provideAssistanceData = message->lpp_MessageBody->choice.c1.choice.provideAssistanceData.criticalExtensions.choice.c1.choice.provideAssistanceData_r9.a_gnss_ProvideAssistanceData;
 
     auto gnss_SystemTime = provideAssistanceData->gnss_CommonAssistData->gnss_ReferenceTime->gnss_SystemTime;
     int tow = gnss_SystemTime.gnss_DayNumber % 7 * 24 * 60 * 60 + gnss_SystemTime.gnss_TimeOfDay;
+    int week = gnss_SystemTime.gnss_DayNumber/7;
 
     for(int i = 0; i < provideAssistanceData->gnss_GenericAssistData->list.count; ++i) {
 
+        usleep(100*1000);
+        
+        char c = (char)0xff;
+        write(device,&c,1);
+        c = (char)0xfe;
+        write(device,&c,1);
+        c = (char)0xfd;
+        write(device,&c,1);
+
         auto genericAssistDataElement = provideAssistanceData->gnss_GenericAssistData->list.array[i];
         printf("gnss id:%ld\n", genericAssistDataElement->gnss_ID.gnss_id);
+        c = (char)genericAssistDataElement->gnss_ID.gnss_id;
+        write(device,&c,1);
+
         auto modelSatelliteElements = genericAssistDataElement->gnss_NavigationModel->gnss_SatelliteList.list;
-        printf("size:%d\n", modelSatelliteElements.size);
         printf("count:%d\n", modelSatelliteElements.count);
+        
+        c = (char)modelSatelliteElements.count;
+        write(device,&c,1);
 
         for (int i = 0; i < modelSatelliteElements.count; i++)
         {
-
+            usleep(100*1000);
             if(genericAssistDataElement->gnss_ID.gnss_id == GNSS_ID__gnss_id_gps) {
                 
                 auto modelSatelliteElement = modelSatelliteElements.array[i];
@@ -388,13 +314,14 @@ void assistance_data_callback(LPP_Client*, LPP_Transaction*, LPP_Message* messag
                 // asn_bit_string_int64
                 ephemeris.SatID = modelSatelliteElement->svID.satellite_id;
                 ephemeris.Valideph = 1;
-                ephemeris.week = *genericAssistDataElement->gnss_Almanac->weekNumber;
+                ephemeris.week = week;
+
                 ephemeris.tow = tow;
                 ephemeris.iodc = asn_bit_string_int64_left(&modelSatelliteElement->iod, 0, 11);
                 ephemeris.iode = asn_bit_string_int64_left(&modelSatelliteElement->iod, 0, 11);
                 ephemeris.ura = keplerianSet.navURA;
                 ephemeris.health = asn_bit_string_int64(&modelSatelliteElement->svHealth, 0);
-                
+
                 ephemeris.af0 = clockModel.navaf0 * c_2m31;
                 ephemeris.af1 = clockModel.navaf1 * c_2m43;
                 ephemeris.af2 = clockModel.navaf2 * c_2m55;
@@ -420,6 +347,7 @@ void assistance_data_callback(LPP_Client*, LPP_Transaction*, LPP_Message* messag
                 ephemeris.cic = keplerianSet.navCic * c_2m29;
                 ephemeris.cis = keplerianSet.navCis * c_2m29;
 
+
                 printf_ephemeris(ephemeris);
             } else if(genericAssistDataElement->gnss_ID.gnss_id == GNSS_ID__gnss_id_bds) {
 
@@ -432,7 +360,7 @@ void assistance_data_callback(LPP_Client*, LPP_Transaction*, LPP_Message* messag
                 // asn_bit_string_int64
                 ephemeris.SatID = modelSatelliteElement->svID.satellite_id;
                 ephemeris.Valideph = 1;
-                ephemeris.week = *genericAssistDataElement->gnss_Almanac->weekNumber;
+                ephemeris.week = week;
                 ephemeris.tow = tow;
                 ephemeris.iodc = asn_bit_string_int64_left(&modelSatelliteElement->iod, 0, 11);
                 ephemeris.iode = asn_bit_string_int64_left(&modelSatelliteElement->iod, 0, 11);
@@ -473,30 +401,6 @@ void assistance_data_callback(LPP_Client*, LPP_Transaction*, LPP_Message* messag
     
     }
 
-    if(1) {
-        return;
-    }
-    unsigned char buffer[4 * 4096];
-    printf("\n");
-    fflush(stdout);
-    int length = 0;
-
-    if (length > 0) {
-        // Output to serial port
-        if (device > 0) {
-            auto output = write(device, (char*)buffer, length);
-            // If an error occurs streaming to serial port, unset the streaming flag
-            if (output == -1) {
-                streaming = 0;
-            }
-        }
-    }
-#else
-    // Extract SSR data
-    printf("SSR LPP Message: %p\n", (void*)message);
-    fflush(stdout);
-
-#endif
 }
 
 speed_t get_baud(long baud) {
@@ -540,4 +444,43 @@ switch (baud) {
     default: 
         return B0;
     }
+}
+
+
+int main() {
+
+    char path[50] = "/dev/ttyUSB0";
+
+    device = open(path, O_RDWR);
+    printf("OUTPUT Serial Port: %s\n", path);
+    if (device < 0) {
+        printf("ERROR: Opening serial port failed. %s.\n", strerror(errno));
+        return 1;
+    }
+    struct termios tios;
+    tcgetattr(device, &tios);
+
+    // Disable flow control, and ignore break and parity errors
+    tios.c_iflag = IGNBRK | IGNPAR;
+    tios.c_oflag = 0;
+    tios.c_lflag = 0;
+
+    // Set baud rate
+    cfsetspeed(&tios, get_baud(115200));
+    tcsetattr(device, TCSAFLUSH, &tios);
+
+    int result = get_agnss();
+    printf("get_agnss result:%d\n", result);
+
+    close(device);
+
+    // while(1) {
+    //     char value[50];
+    //     int nread = read(device, value, 50);
+    //     value[nread] = '\0';
+    //     printf("nread:%d, value:%s\n", nread, value);
+    //     printf("%x\n", ((unsigned int)value[0]));
+    // }
+
+    return 0;
 }

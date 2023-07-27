@@ -141,29 +141,28 @@ bool LPP_Client::process() {
         }
     }
 
-    int timeout       = 0;
-    int message_count = 0;
-    if (!supl_receive_pos(tcp, messages, &message_count, 8, timeout)) {
-        if (!tcp_client_is_connected(tcp)) {
-            return false;
-        }
+    // int timeout       = 0;
+    // int message_count = 0;
+    // if (!supl_receive_pos(tcp, messages, &message_count, 8, timeout)) {
+    //     if (!tcp_client_is_connected(tcp)) {
+    //         return false;
+    //     }
 
-        return true;
-    }
+    //     return true;
+    // }
 
-    for (int j = 0; j < message_count; j++) {
-        auto message = messages[j];
+    // for (int j = 0; j < message_count; j++) {
+    //     auto message = messages[j];
 
-        LPP_Transaction transaction;
-        if (!lpp_harvest_transaction(&transaction, message)) {
-            lpp_destroy(message);
-            continue;
-        }
+    //     LPP_Transaction transaction;
+    //     if (!lpp_harvest_transaction(&transaction, message)) {
+    //         lpp_destroy(message);
+    //         continue;
+    //     }
 
-        process_message(message, &transaction);
-        lpp_destroy(message);
-    }
-
+    //     process_message(message, &transaction);
+    //     lpp_destroy(message);
+    // }
     return true;
 }
 
