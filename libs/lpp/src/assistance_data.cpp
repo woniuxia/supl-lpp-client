@@ -47,6 +47,7 @@ OCTET_STRING* lpp_request_assistance_data(LPP_Transaction* transaction, CellID c
     auto car                   = ALLOC_ZERO(GNSS_CommonAssistDataReq_t);
     car->gnss_ReferenceTimeReq = car_time;
     // car->ext1                  = car1;
+    car->gnss_ReferenceLocationReq = ALLOC_ZERO(GNSS_ReferenceLocationReq);
 
     // GENERIC
     auto gar = ALLOC_ZERO(GNSS_GenericAssistDataReq_t);

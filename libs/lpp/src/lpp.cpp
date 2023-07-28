@@ -130,7 +130,6 @@ bool LPP_Client::process() {
         return false;
     }
 
-    LPP_Message* messages[8];
     if (provide_li.type >= 0) {
         using namespace std::chrono;
         auto current  = system_clock::now();

@@ -58,8 +58,11 @@ int get_agnss() {
 
         .mcc = 460,
         .mnc = 0,
-        .tac = 6291,
-        .cell_id = 25423650,
+        // .tac = 25509,
+        // .cell_id = 336,
+
+        .tac = 25509,
+        .cell_id = 205772544,
     };
 
     cell         = CellID{
@@ -127,6 +130,7 @@ int get_agnss() {
 }
 
 bool provide_location_information_callback(LocationInformation* location, UNUSED void* userdata) {
+    printf("provide_location_information_callback\n");
     location->time = time(NULL);
     location->lat  = 20;
     location->lon  = 20;
@@ -232,6 +236,8 @@ void printf_ephemeris(EPHEMERIS ephemeris) {
         // }
         // printf("\n");
 
+    return;
+
     printf("SatId:%d, validEph:%d, week:%d, tow:%d, iodc:%d, iode:%d, ura:%d, health:%d, ",
             ephemeris.SatID,
             ephemeris.Valideph,
@@ -277,6 +283,11 @@ void assistance_data_callback(LPP_Client*, LPP_Transaction*, LPP_Message* messag
     auto gnss_SystemTime = provideAssistanceData->gnss_CommonAssistData->gnss_ReferenceTime->gnss_SystemTime;
     int tow = gnss_SystemTime.gnss_DayNumber % 7 * 24 * 60 * 60 + gnss_SystemTime.gnss_TimeOfDay;
     int week = gnss_SystemTime.gnss_DayNumber/7;
+
+    auto location_info = provideAssistanceData->gnss_CommonAssistData->gnss_ReferenceLocation->threeDlocation;
+    float latitude = location_info.degreesLatitude * 1.0 / 8388607.0 * 90;
+    float longitude = location_info.degreesLongitude * 1.0 / 8388608.0 * 180;
+    printf("latitude:%f, longitude:%f\n", latitude, longitude);
 
     for(int i = 0; i < provideAssistanceData->gnss_GenericAssistData->list.count; ++i) {
 
