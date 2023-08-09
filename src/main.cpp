@@ -52,7 +52,11 @@ int get_agnss() {
         // .port = 7275,
         // .ssl = true,
 
-        .host = "ppp.bd-caict.com",
+        // .host = "ppp.bd-caict.com",
+        // .port = 7275,
+        // .ssl = true,
+
+        .host = "121.229.15.186",
         .port = 7275,
         .ssl = true,
 
@@ -72,12 +76,12 @@ int get_agnss() {
         .cell = options.cell_id,
     };
 
-    printf("Location Server: %s:%d %s\n", options.host, options.port, options.ssl ? "[ssl]" : "");
-    printf("Cell:            MCC=%ld, MNC=%ld, TAC=%ld, Id=%ld\n", cell.mcc, cell.mnc, cell.tac,
-           cell.cell);
+    // printf("Location Server: %s:%d %s\n", options.host, options.port, options.ssl ? "[ssl]" : "");
+    // printf("Cell:            MCC=%ld, MNC=%ld, TAC=%ld, Id=%ld\n", cell.mcc, cell.mnc, cell.tac,
+    //        cell.cell);
 
     // Flush pending printf output
-    fflush(stdout);
+    // fflush(stdout);
 
     // Initialize OpenSSL
     network_initialize();
@@ -98,7 +102,6 @@ int get_agnss() {
     // Request assistance data (OSR) from server for the 'cell' and register a callback
     // when we receive assistance data.
     auto request = client.request_assistance_data(cell, NULL, assistance_data_callback);
-    printf(" Firmware compile time:%s %s\n", __DATE__, __TIME__);
     return 0;
 #else
     // Request assistance data (SSR) from server for the 'cell' and register a callback
@@ -287,7 +290,7 @@ void assistance_data_callback(LPP_Client*, LPP_Transaction*, LPP_Message* messag
     auto location_info = provideAssistanceData->gnss_CommonAssistData->gnss_ReferenceLocation->threeDlocation;
     float latitude = location_info.degreesLatitude * 1.0 / 8388607.0 * 90;
     float longitude = location_info.degreesLongitude * 1.0 / 8388608.0 * 180;
-    printf("latitude:%f, longitude:%f\n", latitude, longitude);
+    printf("latitude:%f, longitude:%f, ", latitude, longitude);
 
     for(int i = 0; i < provideAssistanceData->gnss_GenericAssistData->list.count; ++i) {
 
@@ -300,13 +303,16 @@ void assistance_data_callback(LPP_Client*, LPP_Transaction*, LPP_Message* messag
         c = (char)0xfd;
         write(device,&c,1);
 
+        write(device, &latitude, 4);
+        write(device, &longitude, 4);
+
         auto genericAssistDataElement = provideAssistanceData->gnss_GenericAssistData->list.array[i];
-        printf("gnss id:%ld\n", genericAssistDataElement->gnss_ID.gnss_id);
         c = (char)genericAssistDataElement->gnss_ID.gnss_id;
         write(device,&c,1);
 
         auto modelSatelliteElements = genericAssistDataElement->gnss_NavigationModel->gnss_SatelliteList.list;
-        printf("count:%d\n", modelSatelliteElements.count);
+        
+        printf("gnss_id:%ld, count:%d, ", genericAssistDataElement->gnss_ID.gnss_id, modelSatelliteElements.count);
         
         c = (char)modelSatelliteElements.count;
         write(device,&c,1);
@@ -411,7 +417,7 @@ void assistance_data_callback(LPP_Client*, LPP_Transaction*, LPP_Message* messag
         }
     
     }
-
+    printf("\n");
 }
 
 speed_t get_baud(long baud) {
@@ -480,8 +486,22 @@ int main() {
     cfsetspeed(&tios, get_baud(115200));
     tcsetattr(device, TCSAFLUSH, &tios);
 
-    int result = get_agnss();
-    printf("get_agnss result:%d\n", result);
+    srand(time(NULL));
+    while(1) {
+        std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
+        std::time_t t_c = std::chrono::system_clock::to_time_t(now);
+        printf("time:%s", std::ctime(&t_c));
+
+        get_agnss();
+
+        // int random_seconds = rand() % 10 + 1;
+        int random_seconds = 1;
+        sleep(random_seconds * 60);
+    }
+
+    // while(1) {
+
+    // }
 
     close(device);
 

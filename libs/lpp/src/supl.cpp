@@ -38,12 +38,18 @@ ULP_PDU_t* supl_create_message(SUPLSession* session, UlpMessage_PR present) {
     ulp->version.min     = 0;
     ulp->version.servind = 0;
 
+    // SetSessionID_t* session_id                 = ALLOC_ZERO(SetSessionID_t);
+    // session_id->sessionId                      = session->id;
+    // session_id->setId.present                  = SETId_PR_iPAddress;
+    // session_id->setId.choice.iPAddress.present = IPAddress_PR_ipv4Address;
+    // OCTET_STRING_fromBuf(&session_id->setId.choice.iPAddress.choice.ipv4Address,
+    //                      (const char*)session->ip, 4);
+
     SetSessionID_t* session_id                 = ALLOC_ZERO(SetSessionID_t);
     session_id->sessionId                      = session->id;
-    session_id->setId.present                  = SETId_PR_iPAddress;
-    session_id->setId.choice.iPAddress.present = IPAddress_PR_ipv4Address;
-    OCTET_STRING_fromBuf(&session_id->setId.choice.iPAddress.choice.ipv4Address,
-                         (const char*)session->ip, 4);
+    session_id->setId.present                  = SETId_PR_imsi;
+    OCTET_STRING_fromBuf(&session_id->setId.choice.imsi, "12345678", 8);
+
     ulp->sessionID.setSessionID = session_id;
     ulp->sessionID.slpSessionID = OPTIONAL_MISSING;
 
@@ -246,7 +252,7 @@ int supl_send_posinit(TCPClient* client, CellID cell, SUPLSession* session,
     //     PrefMethod_agpsSETBasedPreferred;
 
     ulp->message.choice.msSUPLPOSINIT.sETCapabilities.prefMethod =
-        PrefMethod_agpsSETassistedPreferred;
+        PrefMethod_agpsSETBasedPreferred;
     {
         // LPP
         struct Ver2_PosProtocol_extension* posprotocol_ext =
